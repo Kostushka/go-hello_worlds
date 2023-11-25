@@ -10,16 +10,20 @@
                 margin: 100px;
             "
         >
-            <div style="margin: 10px">
-                <label
-                    style="color: brown; font-size: 20px; font-weight: bold"
-                    for="image"
-                    >Выберите картинку для отправки:
-                </label>
-            </div>
-            <div>
-                <input type="file" id="image" name="image" />
-            </div>
+        	<!-- action содержит url (http://localhost:5000/upload), куда отправляются данные формы -->
+            <form method="post" enctype="multipart/form-data" action="/upload"> 
+                <div style="margin: 10px">
+                    <label
+                        style="color: brown; font-size: 20px; font-weight: bold"
+                        for="image"
+                        >Выберите картинку для отправки:
+                    </label>
+                </div>
+                <div>
+                    <input type="file" id="image" name="image" />
+                </div>
+                <button style="margin-top: 10px">Отправить</button>
+            </form>
         </div>
     </body>
 </html>
