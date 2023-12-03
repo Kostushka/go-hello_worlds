@@ -21,17 +21,6 @@ func main() {
 	log.Printf("Received command-line arguments: a directory for images \"%s\" and a file with a form \"%s\"\n", *imgDirPtr, *formFilePtr)
 
 	imgDir := *imgDirPtr
-	// в начале имени каталога не должно быть . или /
-	// if imgDir[0] == '.' {
-		// imgDir = imgDir[1:len(imgDir)]
-	// }
-	// if imgDir[0] == '/' {
-		// imgDir = imgDir[1:len(imgDir)]
-	// }
-	// в конце имени каталога не должно быть /
-	// if imgDir[len(imgDir)-1] == '/' {
-		// imgDir = imgDir[:len(imgDir)-2]
-	// }
 
 	log.Printf("Processed directory path for images: %s -> %s\n", *imgDirPtr, imgDir)
 
