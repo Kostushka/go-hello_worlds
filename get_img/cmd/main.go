@@ -6,9 +6,14 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"github.com/Kostushka/share-images/internal/web"
+	"github.com/Kostushka/share-images/internal/db"
 )
 
 func main() {
+
+	// флаг порта, на котором будет слушать запущенный сервер
+	portPtr := flag.String("port", "5000", "port for listen")
 
 	// флаг каталога для изображений
 	imgDirPtr := flag.String("images-dir", "./images", "catalog for images")
@@ -18,11 +23,11 @@ func main() {
 
 	flag.Parse()
 
-	log.Printf("Received command-line arguments: a directory for images \"%s\" and a file with a form \"%s\"\n", *imgDirPtr, *formFilePtr)
+	log.Printf("Received command-line arguments: port %q a directory for images %q and a file with a form %q\n", *portPtr, *imgDirPtr, *formFilePtr)
+
+	port := ":" + *portPtr
 
 	imgDir := *imgDirPtr
-
-	log.Printf("Processed directory path for images: %s -> %s\n", *imgDirPtr, imgDir)
 
 	formFile := *formFilePtr
 	// файл с формой должен быть указан в аргументах командной строки при запуске сервера
@@ -31,11 +36,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	// объявили пустую бд
-	db := NewDB()
+	// определили пустую бд
+	db := db.NewDB()
 
 	// объявили экземпляр структуры с данными формы, каталога для картинок, бд
-	webServer, err := NewWeb(formFile, imgDir, db)
+	webServer, err := web.NewWeb(formFile, imgDir, db)
 	if err != nil {
 		log.Fatalf("cannot init webServer: %v\n", err)
 	}
@@ -52,6 +57,7 @@ func main() {
 
 	http.HandleFunc("/images/", webServer.ServeImage)
 
-	log.Fatal(http.ListenAndServe(":5000", nil))
+	log.Printf("Server listen and serve on port%s\n", port)
+	log.Fatal(http.ListenAndServe(port, nil))
 }
 
