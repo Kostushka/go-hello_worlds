@@ -4,7 +4,11 @@ import "fmt"
 
 func main() {
 	a := []int{1, 2, 3}
-	fmt.Printf("%d\n", a)
+	b := MyAppend(a, 4)
+	fmt.Println(a, b)
+	a[0] = 0
+	fmt.Println(a, b)
+	
 	// надо присвоить, ибо возвращается новый срез
 	a = append(a, 4)
 	fmt.Printf("%d\n", a)

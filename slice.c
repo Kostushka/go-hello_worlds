@@ -13,6 +13,32 @@ struct Slice append(struct Slice int_slice, int x);
 int main(void) {
 	struct Slice int_slice = make(0, 4);
 
+	int_slice = append(int_slice, 2);
+	int_slice = append(int_slice, 3);
+	int_slice = append(int_slice, 4);
+	struct Slice b = append(int_slice, 5);
+	printf("a: ");
+	for (int i = 0; i < int_slice.len; i++) {
+		printf("%d ", int_slice.arr[i]);
+	}
+	printf("\n");
+	printf("b: ");
+	for (int i = 0; i < b.len; i++) {
+		printf("%d ", b.arr[i]);
+	}
+	printf("\n");
+	int_slice.arr[0] = 0;
+	printf("a: ");
+	for (int i = 0; i < int_slice.len; i++) {
+		printf("%d ", int_slice.arr[i]);
+	}
+	printf("\n");
+	printf("b: ");
+	for (int i = 0; i < b.len; i++) {
+		printf("%d ", b.arr[i]);
+	}
+	printf("\n");
+
 	for (int i = 0; i < 300; i += 20) {
 		int_slice = append(int_slice, i);
 		printf("len: %d\tcap: %d\n", int_slice.len, int_slice.cap);
