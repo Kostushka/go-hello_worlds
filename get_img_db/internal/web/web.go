@@ -71,12 +71,13 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 // метод, который записывает картинку в сокет клиента
 func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	// извлечь из пути имя файла для поиска по бд
-	filename := path.Base(r.URL.String())
+	key := path.Base(r.URL.String())
 	
-	log.Printf("A key for database search has been retrieved from the path: %s\n", filename)
+	log.Printf("A key for database search has been retrieved from the path: %s\n", key)
 
 	// ключ должен быть в бд
-	if !h.db.IsExist(filename) {
+	err := h.db.IsExist(key)
+	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		// шаблон страницы с ошибкой
 		error := ErrorPage{
@@ -85,14 +86,19 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 		}
 		t := template.Must(template.ParseFiles("./web/error.html"))
 		t.Execute(w, error)
-		log.Printf("The key %q is not in the database\n", filename)
+		log.Printf("The key %q is not in the database\n", key)
 		return
 	}
 
 	// получить файл из бд
-	file := h.db.Get(filename)
+	file, err := h.db.Get(key)
 
-	log.Printf("A file was retrieved from the database: %s\n", filename)
+	if err != nil {
+		http.Error(w, "cannot get file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	log.Printf("A file was retrieved from the database: %s\n", key)
 
 	// path := filepath.Join(h.imgDir, filename)
 
@@ -106,24 +112,23 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	// defer file.Close()
 
 	// копировать файл в клиентский сокет
-	_, err := io.Copy(w, Data(file))
+	// _, err := io.Copy(w, file)
+	// if err != nil {
+		// http.Error(w, "cannot sent file to the client: "+err.Error(), http.StatusInternalServerError)
+		// log.Printf("cannot sent file to the client: %v\n", err.Error())
+		// return
+	// }
+
+	// записать файл в клиентский сокет
+	_, err = w.Write(file)
+
 	if err != nil {
-		http.Error(w, "cannot sent file to the client: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("cannot sent file to the client: %v\n", err.Error())
+		http.Error(w, "cannot write file: "+err.Error(), http.StatusBadRequest)
+		log.Printf("The file was not written to the client socket\n")
 		return
 	}
 
-	log.Printf("The contents of the %q have been sent to the client\n", filename)
-}
-
-type Data []byte
-
-func (d Data) Read(bs []byte) (int, error) {
-	i := 0
-	for ; i < len(d); i++ {
-		bs[i] = d[i]
-	}
-	return i, io.EOF
+	log.Printf("The contents of the %q have been sent to the client\n", key)
 }
 
 // функция-конструктор: создает экземпляр структуры с данными
@@ -184,13 +189,13 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	// создать каталог для файлов, если отсутствует
-	if err = os.MkdirAll(h.imgDir, 0o744); err != nil {
-		http.Error(w, "cannot create dir for images: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("cannot create dir for images: %v\n", err.Error())
-		return
-	}
-
-	log.Printf("Created a directory %q for files if missing\n", h.imgDir)
+	// if err = os.MkdirAll(h.imgDir, 0o744); err != nil {
+		// http.Error(w, "cannot create dir for images: "+err.Error(), http.StatusInternalServerError)
+		// log.Printf("cannot create dir for images: %v\n", err.Error())
+		// return
+	// }
+// 
+	// log.Printf("Created a directory %q for files if missing\n", h.imgDir)
 
 	// создать файл
 	// func Create(name string) (*File, error)
@@ -215,9 +220,11 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// log.Printf("The image received from the client is written to a file on disk\n")
 
-	// записать файл в байтовый срез
 	fileBuf := bytes.NewBuffer(nil)
+	
+	// записать файл в байтовый срез
 	_, err = io.Copy(fileBuf, file)
+	
 	if err != nil {
 		http.Error(w, "cannot copy images to file on buf: "+err.Error(), http.StatusInternalServerError)
 		log.Printf("cannot copy images to file on buf: %v\n", err.Error())
@@ -227,12 +234,17 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("The required file is written to the byte buffer\n")
 
 	// сгенирировать ключ
-	// key := createKey(fileheader.Filename, h.db)
+	key := createKey(fileheader.Filename, h.db)
 
-	// log.Printf("To store the file in the hash table, a key %q is generated\n", key)
+	log.Printf("To store the file in the hash table, a key %q is generated\n", key)
 
 	// записать в бд имя файла
-	h.db.Set(fileheader.Filename, fileBuf.Bytes())
+	err = h.db.Set(fileheader.Filename, key, fileBuf.Bytes())
+
+	if err != nil {
+		http.Error(w, "The image has not been added to the database: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	log.Printf("The file is written to the database\n")
 
@@ -240,7 +252,7 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	scheme := "http://"
 	addr := r.Host
 	dir := "/images"
-	fileName := fileheader.Filename
+	fileName := key
 	userLink := scheme + addr + path.Join(dir, fileName)
 	
 	log.Printf("A link %q for the user has been generated\n", userLink)
@@ -259,35 +271,36 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 // генерирую ключ левой пяткой правой ноги (неоптимальный алгоритм с высокой вероятностью ошибок)
-// func createKey(str string, db *db.DB) string {
-	// res := ""
-	// sum := 0
-	// for _, val := range str {
-		// for _, v := range str {
-			// sum += int(v)
-		// }
-		// c := int(val) + 6*sum
-		// // случайное числовое значение должно соответствовать букве английского алфавита
-		// for c < 65 || c > 90 && c < 97 || c > 122 {
-			// if c < 122 {
-				// c += 5
-			// } else {
-				// c /= 2
-			// }
-		// }
-		// res += string(byte(c))
-	// }
-// 
-	// // итоговый результат должен включать 6 букв английского алфавита
-	// x, y := 0, 6
-	// for {
-		// // в бд не должно быть одинаковых ключей
-		// if db.IsExist(res[x:y]) {
-			// x++
-			// y++
-		// }
-		// break
-	// }
-	// // вернуть готовый ключ, по которому будет храниться имя файла
-	// return res[x:y]
-// }
+func createKey(str string, db *db.DB) string {
+	res := ""
+	sum := 0
+	for _, val := range str {
+		for _, v := range str {
+			sum += int(v)
+		}
+		c := int(val) + 6*sum
+		// случайное числовое значение должно соответствовать букве английского алфавита
+		for c < 65 || c > 90 && c < 97 || c > 122 {
+			if c < 122 {
+				c += 5
+			} else {
+				c /= 2
+			}
+		}
+		res += string(byte(c))
+	}
+
+	// итоговый результат должен включать 6 букв английского алфавита
+	x, y := 0, 6
+	for {
+		// в бд не должно быть одинаковых ключей
+		err := db.IsExist(res[x:y])
+		if err != nil {
+			x++
+			y++
+		}
+		break
+	}
+	// вернуть готовый ключ, по которому будет храниться имя файла
+	return res[x:y]
+}

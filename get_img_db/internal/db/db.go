@@ -13,6 +13,7 @@ import (
 // структура данных объекта коллекции
 type ImageData struct {
 	Filename string
+	Key string
 	File []byte
 }
 
@@ -23,7 +24,7 @@ type DB struct {
 }
 
 // добавить в бд
-func (p *DB) Set(filename string, file []byte) {
+func (p *DB) Set(filename, key string, file []byte) error {
 	// блокировка для всех: никому больше нельзя читать и писать
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -31,6 +32,7 @@ func (p *DB) Set(filename string, file []byte) {
 	// экземпляр объекта коллекции
 	image := ImageData{
 		Filename: filename,
+		Key: key,
 		File: file,
 	}
 	
@@ -38,56 +40,62 @@ func (p *DB) Set(filename string, file []byte) {
 	_, err := p.db.InsertOne(context.TODO(), image)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("The image %s has not been added to the database: %v\n", filename, err.Error())
+		return err
 	}
+
+	return nil
 }
 
-// проверить, записан ли уже в бд файл по имени картинки
-func (p *DB) IsExist(filename string) bool {
+// проверить, записан ли уже в бд файл по ключу картинки
+func (p *DB) IsExist(key string) error {
 	// блокировка на чтение: никому нельзя писать, но можно читать одновременно нескольким клиентам
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// найти картинку в бд и извлечь
+	// bson.M — неупорядоченное представление документа BSON (порядок элементов не имеет значения)
 	var resImage bson.M
-
-	err := p.db.FindOne(context.TODO(), bson.D{{"filename", filename}}).Decode(&resImage)
-
-	if err != nil {
-		log.Fatal(err)
-	}
 	
-	if resImage != nil {
-		return true
-	} else {
-		return false
+	// найти картинку в бд и извлечь
+	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON (порядок элементов имеет значения)
+
+	if err != nil {
+		log.Printf("%v\n", err.Error())
+		return err
 	}
+
+	return nil
 }
 
-// получить файл по имени картинки
-func (p *DB) Get(filename string) []byte {
+// получить файл по ключу картинки
+func (p *DB) Get(key string) ([]byte, error) {
 	// блокировка на чтение: никому нельзя писать, но можно читать одновременно нескольким клиентам
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	// найти картинку в бд и извлечь
 	var resImage bson.M
-
-	err := p.db.FindOne(context.TODO(), bson.D{{"filename", filename}}).Decode(&resImage)
+	
+	// найти картинку в бд и извлечь
+	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%v\n", err.Error())
+		return nil, err
 	}
 
 	m, err := bson.Marshal(resImage)
 
 	if err != nil {
-		log.Fatal(err)
+		log.Printf("%v\n", err.Error())
+		return nil, err
 	}
 
-	_, data := bson.Raw(m).Lookup("file").Binary()
+	// bson.Raw(...) - полный документ bson
+	// Lookup(...) - поиск в документе по ключу 
+	// Binary() - возвращает двоичное знач bson
+	_, data := bson.Raw(m).Lookup("file").Binary() 
 	
-	return data
+	return data, nil
 }
 
 // функция-конструктор
