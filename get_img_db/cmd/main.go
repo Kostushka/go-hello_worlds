@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
+	"github.com/Kostushka/share-images/internal/db"
+	"github.com/Kostushka/share-images/internal/web"
 	"log"
 	"os"
-	"github.com/Kostushka/share-images/internal/web"
-	"github.com/Kostushka/share-images/internal/db"
 )
 
 func main() {
@@ -51,15 +51,15 @@ func configParse() (portPtr, imgDirPtr, formFilePtr, URIDb, nameDb, nameCollecti
 
 	flag.Parse()
 
-	log.Printf("Received command-line arguments: port %q\na directory for images %q\n" +
-				"a file with a form %q\nURI for database %q\ndatabase name %q\ncollection name %q", 
-				*portPtr, *imgDirPtr, *formFilePtr, *URIDb, *nameDb, *nameCollection)
+	log.Printf("Received command-line arguments: port %q\na directory for images %q\n"+
+		"a file with a form %q\nURI for database %q\ndatabase name %q\ncollection name %q",
+		*portPtr, *imgDirPtr, *formFilePtr, *URIDb, *nameDb, *nameCollection)
 
 	// порт должен быть корректным
-	if ((*portPtr)[0] != ':') {
+	if (*portPtr)[0] != ':' {
 		*portPtr = ":" + *portPtr
 	}
-	
+
 	// файл с формой должен быть указан в аргументах командной строки при запуске сервера
 	if len(*formFilePtr) == 0 {
 		log.Printf("There is no html file with the form in the command line args")

@@ -2,8 +2,8 @@ package db
 
 import (
 	"context"
-	"log"
 	"errors"
+	"log"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -13,8 +13,8 @@ import (
 // структура данных объекта коллекции
 type imageData struct {
 	Filename string
-	Key string
-	File []byte
+	Key      string
+	File     []byte
 }
 
 // бд с методами
@@ -27,10 +27,10 @@ func (p *DB) Set(filename, key string, file []byte) error {
 	// экземпляр объекта коллекции
 	image := &imageData{
 		Filename: filename,
-		Key: key,
-		File: file,
+		Key:      key,
+		File:     file,
 	}
-	
+
 	// добавить картинку в коллекцию
 	res, err := p.db.InsertOne(context.TODO(), image)
 
@@ -48,10 +48,10 @@ func (p *DB) Set(filename, key string, file []byte) error {
 func (p *DB) IsExist(key string) (bool, error) {
 	// bson.M — неупорядоченное представление документа BSON (порядок элементов не имеет значения)
 	var resImage bson.M
-	
+
 	// найти картинку в бд и извлечь
-	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON 
-																				// (порядок элементов имеет значения)
+	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON
+	// (порядок элементов имеет значения)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			log.Printf("The file was not found in the database: %v", err)
@@ -59,16 +59,16 @@ func (p *DB) IsExist(key string) (bool, error) {
 		} else {
 			log.Printf("The file was not extracted from the database: %v", err)
 			return false, err
-		}	
+		}
 	}
-	
+
 	return true, nil
 }
 
 // получить файл по ключу картинки
 func (p *DB) Get(key string) ([]byte, error) {
 	var resImage bson.M
-	
+
 	// найти картинку в бд и извлечь
 	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage)
 
@@ -81,7 +81,7 @@ func (p *DB) Get(key string) ([]byte, error) {
 			return nil, err
 		}
 	}
-	
+
 	m, err := bson.Marshal(resImage)
 
 	if err != nil {
@@ -90,10 +90,10 @@ func (p *DB) Get(key string) ([]byte, error) {
 	}
 
 	// bson.Raw(...) - полный документ bson
-	// Lookup(...) - поиск в документе по ключу 
+	// Lookup(...) - поиск в документе по ключу
 	// Binary() - возвращает двоичное знач bson
-	_, data := bson.Raw(m).Lookup("file").Binary() 
-	
+	_, data := bson.Raw(m).Lookup("file").Binary()
+
 	return data, nil
 }
 
@@ -113,7 +113,7 @@ func connectToDB(URIDb, nameDb, nameCollection *string) (*mongo.Collection, erro
 
 	// установить параметры клиента
 	clientOptions := options.Client().ApplyURI(*URIDb)
-	
+
 	// подключиться к MongoDB
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 

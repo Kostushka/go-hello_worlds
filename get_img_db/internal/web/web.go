@@ -1,17 +1,17 @@
 package web
 
 import (
+	"bytes"
+	"fmt"
+	"github.com/Kostushka/share-images/internal/db"
 	"io"
 	"log"
-	"net/http"
 	"math/rand"
+	"net/http"
 	"os"
-	"fmt"
-	"bytes"
 	"path"
 	"text/template"
-	"github.com/Kostushka/share-images/internal/db"
-	
+
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -24,14 +24,14 @@ const linkHtml = "./web/link.html"
 
 type errorPage struct {
 	Number int
-	Text string
+	Text   string
 }
 
 // структурами с данными
 type Web struct {
-	form []byte
+	form   []byte
 	imgDir string
-	db *db.DB
+	db     *db.DB
 }
 
 func writeIcon(w http.ResponseWriter, r *http.Request) {
@@ -45,14 +45,14 @@ func writeIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// записать иконку в клиентский сокет
-	_, err = w.Write(iconBuf)		
+	_, err = w.Write(iconBuf)
 
 	if err != nil {
 		http.Error(w, "cannot sent icon file to the client: "+err.Error(), http.StatusInternalServerError)
 		log.Printf("cannot sent icon file to the client: %v", err.Error())
 		return
 	}
-	
+
 	log.Printf("The icon is written to the client's socket")
 	return
 }
@@ -67,7 +67,7 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 		writeIcon(w, r)
 		return
 	}
-	
+
 	// URL должен быть /
 	if r.URL.String() != "/" {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -86,31 +86,31 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	// извлечь из пути имя файла для поиска по бд
 	key := path.Base(r.URL.String())
-	
+
 	log.Printf("A key for database search has been retrieved from the path: %s", key)
 
 	// получить файл из бд
 	file, err := h.db.Get(key)
 
 	if err != nil {
-		switch(err) {
-			case mongo.ErrNoDocuments:
-				w.WriteHeader(http.StatusNotFound)
-				// шаблон страницы с ошибкой
-				errPage := &errorPage{
-					Number: http.StatusNotFound,
-					Text: http.StatusText(http.StatusNotFound),
-				}
-				t := template.Must(template.ParseFiles(errorHtml))
-				templErr := t.Execute(w, errPage)
-				if templErr != nil {
-					http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
-					log.Printf("The template was not recorded")
-				}
-				return
-			default:
-				http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
-				return
+		switch err {
+		case mongo.ErrNoDocuments:
+			w.WriteHeader(http.StatusNotFound)
+			// шаблон страницы с ошибкой
+			errPage := &errorPage{
+				Number: http.StatusNotFound,
+				Text:   http.StatusText(http.StatusNotFound),
+			}
+			t := template.Must(template.ParseFiles(errorHtml))
+			templErr := t.Execute(w, errPage)
+			if templErr != nil {
+				http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
+				log.Printf("The template was not recorded")
+			}
+			return
+		default:
+			http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
+			return
 		}
 	}
 
@@ -131,7 +131,7 @@ func (h *Web) write(w http.ResponseWriter, data []byte, errText string, errStatu
 		// шаблон страницы с ошибкой
 		errPage := &errorPage{
 			Number: errStatus,
-			Text: http.StatusText(errStatus),
+			Text:   http.StatusText(errStatus),
 		}
 		t := template.Must(template.ParseFiles(errorHtml))
 		templErr := t.Execute(w, errPage)
@@ -140,7 +140,7 @@ func (h *Web) write(w http.ResponseWriter, data []byte, errText string, errStatu
 			log.Printf("The template was not recorded")
 			return templErr
 		}
-		
+
 		log.Printf("%s: %v", errText, err)
 		return err
 	}
@@ -150,7 +150,7 @@ func (h *Web) write(w http.ResponseWriter, data []byte, errText string, errStatu
 		log.Printf("%d byte expected, was received %d", len(data), bw)
 		return fmt.Errorf("Partial write to the client")
 	}
-	
+
 	return nil
 }
 
@@ -164,9 +164,9 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 
 	// определение экземпляра структуры с данными для программы сервера
 	serv := &Web{
-		form: f,
+		form:   f,
 		imgDir: imgDir,
-		db: db,
+		db:     db,
 	}
 
 	// обработчики путей
@@ -229,16 +229,16 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	defer file.Close()
 
 	fileBuf := bytes.NewBuffer(nil)
-	
+
 	// записать файл в байтовый срез
 	_, err = io.Copy(fileBuf, file)
-	
+
 	if err != nil {
 		http.Error(w, "cannot copy images to file on buf: "+err.Error(), http.StatusInternalServerError)
 		log.Printf("cannot copy images to file on buf: %v", err.Error())
 		return
 	}
-	
+
 	log.Printf("The required file is written to the byte buffer")
 
 	// сгенирировать ключ
@@ -267,7 +267,7 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	dir := "/images"
 	fileName := key
 	userLink := scheme + addr + path.Join(dir, fileName)
-	
+
 	log.Printf("A link %q for the user has been generated", userLink)
 
 	// шаблон файла с ссылкой
@@ -284,7 +284,7 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 		log.Printf("The template was not recorded")
 		return
 	}
-	
+
 	log.Printf("A link %q has been sent to the client", userLink)
 }
 
@@ -300,10 +300,12 @@ const endLoA = 122
 func createKey(str string, db *db.DB) (string, error) {
 	res := ""
 
-	START: for lim := keyLen; lim > 0; lim-- {
+START:
+	for lim := keyLen; lim > 0; lim-- {
 		// сгенерировать случайное число
-		LOOP: c := rand.Intn(endLoA + 1)
-		
+	LOOP:
+		c := rand.Intn(endLoA + 1)
+
 		// случайное числовое значение должно соответствовать букве английского алфавита или цифре
 		if c < startInt || c > endInt && c < startUpA || c > endUpA && c < startLoA || c > endLoA {
 			goto LOOP
@@ -313,14 +315,17 @@ func createKey(str string, db *db.DB) (string, error) {
 
 	// в бд не должно быть одинаковых ключей
 	isFound, err := db.IsExist(res)
+
 	if err != nil {
 		return "", err
 	}
+
+	// если сгенерированный ключ совпадает с ключом какого-либо документа в бд, сгенерировать новый ключ
 	if isFound == true {
 		res = ""
 		goto START
 	}
-	
+
 	// вернуть готовый ключ, по которому будет храниться имя файла
 	return res, nil
 }
