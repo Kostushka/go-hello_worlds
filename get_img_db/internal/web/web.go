@@ -64,7 +64,8 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 	// добавить иконку
 	if r.URL.String() == iconRequest {
 		// обработать запрос за иконкой
-		writeIcon(w, r)	
+		writeIcon(w, r)
+		return
 	}
 	
 	// URL должен быть /
@@ -94,10 +95,22 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch(err) {
 			case mongo.ErrNoDocuments:
-				http.Error(w, "cannot found file: "+err.Error(), http.StatusNotFound)
+				w.WriteHeader(http.StatusNotFound)
+				// шаблон страницы с ошибкой
+				errPage := &errorPage{
+					Number: http.StatusNotFound,
+					Text: http.StatusText(http.StatusNotFound),
+				}
+				t := template.Must(template.ParseFiles(errorHtml))
+				templErr := t.Execute(w, errPage)
+				if templErr != nil {
+					http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
+					log.Printf("The template was not recorded")
+				}
 				return
 			default:
 				http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
+				return
 		}
 	}
 

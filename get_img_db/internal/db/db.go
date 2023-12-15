@@ -52,15 +52,16 @@ func (p *DB) IsExist(key string) (bool, error) {
 	// найти картинку в бд и извлечь
 	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON 
 																				// (порядок элементов имеет значения)
-
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		log.Printf("The file was not found in the database: %v", err)
-		return false, nil
-	} else {
-		log.Printf("The file was not extracted from the database: %v", err)
-		return false, err
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("The file was not found in the database: %v", err)
+			return false, nil
+		} else {
+			log.Printf("The file was not extracted from the database: %v", err)
+			return false, err
+		}	
 	}
-
+	
 	return true, nil
 }
 
@@ -71,12 +72,14 @@ func (p *DB) Get(key string) ([]byte, error) {
 	// найти картинку в бд и извлечь
 	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage)
 
-	if errors.Is(err, mongo.ErrNoDocuments) {
-		log.Printf("The file was not found in the database: %v", err)
-		return nil, err
-	} else {
-		log.Printf("The file was not extracted from the database: %v", err)
-		return nil, err
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			log.Printf("The file was not found in the database: %v", err)
+			return nil, err
+		} else {
+			log.Printf("The file was not extracted from the database: %v", err)
+			return nil, err
+		}
 	}
 	
 	m, err := bson.Marshal(resImage)
