@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"log"
-	"sync"
+	"errors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -11,7 +11,7 @@ import (
 )
 
 // структура данных объекта коллекции
-type ImageData struct {
+type imageData struct {
 	Filename string
 	Key string
 	File []byte
@@ -20,27 +20,24 @@ type ImageData struct {
 // бд с методами
 type DB struct {
 	db *mongo.Collection
-	mu sync.RWMutex
 }
 
 // добавить в бд
 func (p *DB) Set(filename, key string, file []byte) error {
-	// блокировка для всех: никому больше нельзя читать и писать
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	
 	// экземпляр объекта коллекции
-	image := ImageData{
+	image := &imageData{
 		Filename: filename,
 		Key: key,
 		File: file,
 	}
 	
 	// добавить картинку в коллекцию
-	_, err := p.db.InsertOne(context.TODO(), image)
+	res, err := p.db.InsertOne(context.TODO(), image)
+
+	log.Printf("A new document has been added to the database: %v", res.InsertedID)
 
 	if err != nil {
-		log.Printf("The image %s has not been added to the database: %v\n", filename, err.Error())
+		log.Printf("The image %s has not been added to the database: %v", filename, err.Error())
 		return err
 	}
 
@@ -48,45 +45,44 @@ func (p *DB) Set(filename, key string, file []byte) error {
 }
 
 // проверить, записан ли уже в бд файл по ключу картинки
-func (p *DB) IsExist(key string) error {
-	// блокировка на чтение: никому нельзя писать, но можно читать одновременно нескольким клиентам
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
+func (p *DB) IsExist(key string) (bool, error) {
 	// bson.M — неупорядоченное представление документа BSON (порядок элементов не имеет значения)
 	var resImage bson.M
 	
 	// найти картинку в бд и извлечь
-	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON (порядок элементов имеет значения)
+	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage) // bson.D - упорядоченное представление документа BSON 
+																				// (порядок элементов имеет значения)
 
-	if err != nil {
-		log.Printf("%v\n", err.Error())
-		return err
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		log.Printf("The file was not found in the database: %v", err)
+		return false, nil
+	} else {
+		log.Printf("The file was not extracted from the database: %v", err)
+		return false, err
 	}
 
-	return nil
+	return true, nil
 }
 
 // получить файл по ключу картинки
 func (p *DB) Get(key string) ([]byte, error) {
-	// блокировка на чтение: никому нельзя писать, но можно читать одновременно нескольким клиентам
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	var resImage bson.M
 	
 	// найти картинку в бд и извлечь
 	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage)
 
-	if err != nil {
-		log.Printf("%v\n", err.Error())
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		log.Printf("The file was not found in the database: %v", err)
+		return nil, err
+	} else {
+		log.Printf("The file was not extracted from the database: %v", err)
 		return nil, err
 	}
-
+	
 	m, err := bson.Marshal(resImage)
 
 	if err != nil {
-		log.Printf("%v\n", err.Error())
+		log.Printf("%v", err.Error())
 		return nil, err
 	}
 
@@ -99,35 +95,38 @@ func (p *DB) Get(key string) ([]byte, error) {
 }
 
 // функция-конструктор
-func NewDB() *DB {
-	collection := ConnectToDB()
+func NewDB(URIDb, nameDb, nameCollection *string) (*DB, error) {
+	collection, err := connectToDB(URIDb, nameDb, nameCollection)
+	if err != nil {
+		return nil, err
+	}
 	return &DB{
 		db: collection,
-	}
+	}, nil
 }
 
 // создание подключения и инициализация коллекции бд
-func ConnectToDB() *mongo.Collection {
+func connectToDB(URIDb, nameDb, nameCollection *string) (*mongo.Collection, error) {
 
 	// установить параметры клиента
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	clientOptions := options.Client().ApplyURI(*URIDb)
 	
 	// подключиться к MongoDB
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// проверить соединение
 	err = client.Ping(context.TODO(), nil)
 
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	// создать коллекцию для картинок
-	imagesCollection := client.Database("db").Collection("images")
+	imagesCollection := client.Database(*nameDb).Collection(*nameCollection)
 
-	return imagesCollection
+	return imagesCollection, nil
 }
