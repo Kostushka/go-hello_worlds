@@ -33,7 +33,7 @@ type Web struct {
 	templLink *template.Template
 }
 
-func writeIcon(w http.ResponseWriter, r *http.Request) {
+func (h *Web) writeIcon(w http.ResponseWriter, r *http.Request) {
 	// записать файл в буфер байт
 	iconBuf, err := os.ReadFile(iconFile)
 
@@ -44,16 +44,9 @@ func writeIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// записать иконку в клиентский сокет
-	// err = h.write(w, iconBuf, "cannot sent icon file to the client", http.StatusInternalServerError)
-	// if err != nil {
-		// log.Printf("cannot sent icon file to the client")
-		// return
-	// }
-	_, err = w.Write(iconBuf)
-
+	err = h.write(w, iconBuf, "cannot sent icon file to the client", http.StatusInternalServerError)
 	if err != nil {
-		http.Error(w, "cannot sent icon file to the client: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("cannot sent icon file to the client: %v", err.Error())
+		log.Printf("cannot sent icon file to the client")
 		return
 	}
 
@@ -67,7 +60,7 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 	// добавить иконку
 	if r.URL.String() == iconRequest {
 		// обработать запрос за иконкой
-		writeIcon(w, r)
+		h.writeIcon(w, r)
 		return
 	}
 
