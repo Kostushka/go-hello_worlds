@@ -11,8 +11,6 @@ import (
 	"os"
 	"path"
 	"text/template"
-
-	"go.mongodb.org/mongo-driver/mongo"
 )
 
 const maxUploadSize = 32 << 20 // 32 MB
@@ -32,6 +30,7 @@ type Web struct {
 	form   []byte
 	imgDir string
 	db     *db.DB
+	templLink *template.Template
 }
 
 func writeIcon(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +44,11 @@ func writeIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// записать иконку в клиентский сокет
+	// err = h.write(w, iconBuf, "cannot sent icon file to the client", http.StatusInternalServerError)
+	// if err != nil {
+		// log.Printf("cannot sent icon file to the client")
+		// return
+	// }
 	_, err = w.Write(iconBuf)
 
 	if err != nil {
@@ -54,7 +58,6 @@ func writeIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("The icon is written to the client's socket")
-	return
 }
 
 // метод, который записывает форму в сокет клиента
@@ -93,8 +96,8 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	file, err := h.db.Get(key)
 
 	if err != nil {
-		switch err {
-		case mongo.ErrNoDocuments:
+		// файл не найден
+		if db.RecordNotFound {
 			w.WriteHeader(http.StatusNotFound)
 			// шаблон страницы с ошибкой
 			errPage := &errorPage{
@@ -108,8 +111,9 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 				log.Printf("The template was not recorded")
 			}
 			return
-		default:
+		} else {
 			http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
+			log.Printf("cannot get file: %v", err.Error())
 			return
 		}
 	}
@@ -159,6 +163,14 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 	// прочитать содержимое файла с формой в срез байт
 	f, err := os.ReadFile(formName)
 	if err != nil {
+		log.Printf("cannot read form file %s: %v", formName, err.Error())
+		return nil, err
+	}
+
+	// получить шаблон файла с ссылкой:
+	templLink, err := template.ParseFiles(linkHtml)
+	if err != nil {
+		log.Printf("cannot get template with link: %v", err.Error())
 		return nil, err
 	}
 
@@ -167,6 +179,7 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 		form:   f,
 		imgDir: imgDir,
 		db:     db,
+		templLink: templLink,
 	}
 
 	// обработчики путей
@@ -182,7 +195,6 @@ func (h *Web) Run(port string) error {
 	if err := http.ListenAndServe(port, nil); err != nil {
 		return err
 	}
-	log.Printf("Server listen and serve on port%s", port)
 	return nil
 }
 
@@ -270,15 +282,8 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("A link %q for the user has been generated", userLink)
 
-	// шаблон файла с ссылкой
-	t, err := template.ParseFiles(linkHtml)
-	if err != nil {
-		http.Error(w, "cannot get template with link: "+err.Error(), http.StatusInternalServerError)
-		log.Printf("cannot get template with link: %v", err.Error())
-		return
-	}
 	// шаблон получает данные для обработки и записывается в сокет клиента
-	err = t.Execute(w, userLink)
+	err = h.templLink.Execute(w, userLink)
 	if err != nil {
 		http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
 		log.Printf("The template was not recorded")

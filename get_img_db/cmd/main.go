@@ -1,70 +1,85 @@
 package main
 
 import (
+	"strconv"
 	"flag"
+	"fmt"
 	"github.com/Kostushka/share-images/internal/db"
 	"github.com/Kostushka/share-images/internal/web"
 	"log"
-	"os"
 )
 
 func main() {
 
+	var conf config
 	// получить конфигурационные данные
-	port, imgDir, formFile, URIDb, nameDb, nameCollection := configParse()
-
+	if err := configParse(&conf); err != nil {
+		log.Fatal("cannot get config data: %v", err)
+	}
+	
 	// определили пустую бд с коллекцией
-	db, err := db.NewDB(URIDb, nameDb, nameCollection)
+	db, err := db.NewDB(conf.URIDb, conf.nameDb, conf.nameCollection)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Printf("An empty db is defined")
+	log.Printf("db %s is defined", conf.nameDb)
 
 	// объявили экземпляр структуры с данными формы, каталога для картинок, бд
-	webServer, err := web.NewWeb(*formFile, *imgDir, db)
+	webServer, err := web.NewWeb(conf.formFile, conf.imgDir, db)
 	if err != nil {
 		log.Fatalf("cannot init webServer: %v", err)
 	}
 
 	// запуск слушателя и обработчика клиентских запросов
-	log.Fatal(webServer.Run(*port))
+	log.Fatal(webServer.Run(conf.port))
 }
 
-func configParse() (portPtr, imgDirPtr, formFilePtr, URIDb, nameDb, nameCollection *string) {
+type config struct {
+	port string
+	imgDir string
+	formFile string
+	URIDb string
+	nameDb string
+	nameCollection string
+}
+
+func configParse(conf *config) error {
+	
 	// флаг порта, на котором будет слушать запущенный сервер
-	portPtr = flag.String("port", "5000", "port for listen")
+	var port int
+	flag.IntVar(&port, "port", 5000, "port for listen")
 
 	// флаг каталога для изображений
-	imgDirPtr = flag.String("images-dir", "./images", "catalog for images")
+	flag.StringVar(&conf.imgDir, "images-dir", "./images", "catalog for images")
 
 	// флаг файла с формой
-	formFilePtr = flag.String("form-file", "", "form file")
+	flag.StringVar(&conf.formFile, "form-file", "", "form file")
 
 	// адрес для запуска процесса работы с бд
-	URIDb = flag.String("URI-db", "mongodb://localhost:27017", "URI for database")
+	flag.StringVar(&conf.URIDb, "URI-db", "mongodb://localhost:27017", "URI for database")
 
 	// название бд
-	nameDb = flag.String("name-db", "service", "database name")
+	flag.StringVar(&conf.nameDb, "name-db", "service", "database name")
 
 	// название коллекции в бд
-	nameCollection = flag.String("name-collection", "images", "collection name")
+	flag.StringVar(&conf.nameCollection, "name-collection", "images", "collection name")
 
 	flag.Parse()
 
-	log.Printf("Received command-line arguments: port %q\na directory for images %q\n"+
-		"a file with a form %q\nURI for database %q\ndatabase name %q\ncollection name %q",
-		*portPtr, *imgDirPtr, *formFilePtr, *URIDb, *nameDb, *nameCollection)
-
 	// порт должен быть корректным
-	if (*portPtr)[0] != ':' {
-		*portPtr = ":" + *portPtr
+	if port < 0 || port > 65535 {
+		return fmt.Errorf("port invalid")
 	}
+	conf.port = ":" + strconv.Itoa(port)
 
 	// файл с формой должен быть указан в аргументах командной строки при запуске сервера
-	if len(*formFilePtr) == 0 {
-		log.Printf("There is no html file with the form in the command line args")
-		os.Exit(1)
+	if len(conf.formFile) == 0 {
+		fmt.Errorf("There is no html file with the form in the command line args")
 	}
 
-	return
+	log.Printf("Received command-line arguments: port %q\na directory for images %q\n"+
+			"a file with a form %q\nURI for database %q\ndatabase name %q\ncollection name %q",
+			conf.port, conf.imgDir, conf.formFile, conf.URIDb, conf.nameDb, conf.nameCollection)
+
+	return nil
 }

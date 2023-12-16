@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"log"
-
+	"fmt"
+	
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -22,17 +23,18 @@ type DB struct {
 	db *mongo.Collection
 }
 
+// наличие документа в бд
+var RecordNotFound bool
+
 // добавить в бд
 func (p *DB) Set(filename, key string, file []byte) error {
-	// экземпляр объекта коллекции
-	image := &imageData{
-		Filename: filename,
-		Key:      key,
-		File:     file,
-	}
 
 	// добавить картинку в коллекцию
-	res, err := p.db.InsertOne(context.TODO(), image)
+	res, err := p.db.InsertOne(context.TODO(), &imageData{
+			Filename: filename,
+			Key:      key,
+			File:     file,
+	})
 
 	log.Printf("A new document has been added to the database: %v", res.InsertedID)
 
@@ -56,10 +58,9 @@ func (p *DB) IsExist(key string) (bool, error) {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			log.Printf("The file was not found in the database: %v", err)
 			return false, nil
-		} else {
-			log.Printf("The file was not extracted from the database: %v", err)
-			return false, err
 		}
+		log.Printf("The file was not extracted from the database: %v", err)
+		return false, err
 	}
 
 	return true, nil
@@ -72,20 +73,23 @@ func (p *DB) Get(key string) ([]byte, error) {
 	// найти картинку в бд и извлечь
 	err := p.db.FindOne(context.TODO(), bson.D{{"key", key}}).Decode(&resImage)
 
+	// флаг отсутствия картинки в бд
+	RecordNotFound = false
+	
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
+			RecordNotFound = true
 			log.Printf("The file was not found in the database: %v", err)
 			return nil, err
-		} else {
-			log.Printf("The file was not extracted from the database: %v", err)
-			return nil, err
 		}
+		log.Printf("The file was not extracted from the database: %v", err)
+		return nil, fmt.Errorf("The file was not extracted from the database: %w", err)
 	}
 
 	m, err := bson.Marshal(resImage)
 
 	if err != nil {
-		log.Printf("%v", err.Error())
+		log.Printf("BSON document not received: %v", err.Error())
 		return nil, err
 	}
 
@@ -98,7 +102,7 @@ func (p *DB) Get(key string) ([]byte, error) {
 }
 
 // функция-конструктор
-func NewDB(URIDb, nameDb, nameCollection *string) (*DB, error) {
+func NewDB(URIDb, nameDb, nameCollection string) (*DB, error) {
 	collection, err := connectToDB(URIDb, nameDb, nameCollection)
 	if err != nil {
 		return nil, err
@@ -109,10 +113,10 @@ func NewDB(URIDb, nameDb, nameCollection *string) (*DB, error) {
 }
 
 // создание подключения и инициализация коллекции бд
-func connectToDB(URIDb, nameDb, nameCollection *string) (*mongo.Collection, error) {
+func connectToDB(URIDb, nameDb, nameCollection string) (*mongo.Collection, error) {
 
 	// установить параметры клиента
-	clientOptions := options.Client().ApplyURI(*URIDb)
+	clientOptions := options.Client().ApplyURI(URIDb)
 
 	// подключиться к MongoDB
 	client, err := mongo.Connect(context.TODO(), clientOptions)
@@ -128,8 +132,8 @@ func connectToDB(URIDb, nameDb, nameCollection *string) (*mongo.Collection, erro
 		return nil, err
 	}
 
-	// создать коллекцию для картинок
-	imagesCollection := client.Database(*nameDb).Collection(*nameCollection)
+	// инициализировать обработчик коллекции
+	imagesCollection := client.Database(nameDb).Collection(nameCollection)
 
 	return imagesCollection, nil
 }
