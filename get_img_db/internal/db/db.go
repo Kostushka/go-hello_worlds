@@ -3,9 +3,9 @@ package db
 import (
 	"context"
 	"errors"
-	"log"
 	"fmt"
-	
+	"log"
+
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -31,17 +31,17 @@ func (p *DB) Set(filename, key string, file []byte) error {
 
 	// добавить картинку в коллекцию
 	res, err := p.db.InsertOne(context.TODO(), &imageData{
-			Filename: filename,
-			Key:      key,
-			File:     file,
+		Filename: filename,
+		Key:      key,
+		File:     file,
 	})
-
-	log.Printf("A new document has been added to the database: %v", res.InsertedID)
 
 	if err != nil {
 		log.Printf("The image %s has not been added to the database: %v", filename, err.Error())
 		return err
 	}
+
+	log.Printf("A new document has been added to the database: %v", res.InsertedID)
 
 	return nil
 }
@@ -75,7 +75,7 @@ func (p *DB) Get(key string) ([]byte, error) {
 
 	// флаг отсутствия картинки в бд
 	RecordNotFound = false
-	
+
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			RecordNotFound = true

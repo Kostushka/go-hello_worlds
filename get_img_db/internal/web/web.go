@@ -27,10 +27,11 @@ type errorPage struct {
 
 // структурами с данными
 type Web struct {
-	form   []byte
-	imgDir string
-	db     *db.DB
-	templLink *template.Template
+	form       []byte
+	imgDir     string
+	db         *db.DB
+	templLink  *template.Template
+	templError *template.Template
 }
 
 func (h *Web) writeIcon(w http.ResponseWriter, r *http.Request) {
@@ -44,9 +45,9 @@ func (h *Web) writeIcon(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// записать иконку в клиентский сокет
-	err = h.write(w, iconBuf, "cannot sent icon file to the client", http.StatusInternalServerError)
+	err = h.write(w, iconBuf, "cannot send icon file to the client", http.StatusInternalServerError)
 	if err != nil {
-		log.Printf("cannot sent icon file to the client")
+		log.Printf("cannot send icon file to the client")
 		return
 	}
 
@@ -68,6 +69,7 @@ func (h *Web) Form(w http.ResponseWriter, r *http.Request) {
 	if r.URL.String() != "/" {
 		http.Redirect(w, r, "/", http.StatusFound)
 		log.Printf("The request was redirected from address %q to address \"/\"", r.URL.String())
+		return
 	}
 
 	// записать содержимое формы в сокет клиента
@@ -91,24 +93,15 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// файл не найден
 		if db.RecordNotFound {
-			w.WriteHeader(http.StatusNotFound)
-			// шаблон страницы с ошибкой
-			errPage := &errorPage{
-				Number: http.StatusNotFound,
-				Text:   http.StatusText(http.StatusNotFound),
-			}
-			t := template.Must(template.ParseFiles(errorHtml))
-			templErr := t.Execute(w, errPage)
-			if templErr != nil {
+			if templErr := h.writeError(w, http.StatusText(http.StatusNotFound), http.StatusNotFound); templErr != nil {
 				http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
 				log.Printf("The template was not recorded")
 			}
 			return
-		} else {
-			http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
-			log.Printf("cannot get file: %v", err.Error())
-			return
 		}
+		http.Error(w, "cannot get file: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("cannot get file: %v", err.Error())
+		return
 	}
 
 	log.Printf("A file was retrieved from the database: %s", key)
@@ -124,15 +117,7 @@ func (h *Web) ServeImage(w http.ResponseWriter, r *http.Request) {
 func (h *Web) write(w http.ResponseWriter, data []byte, errText string, errStatus int) error {
 	bw, err := w.Write(data)
 	if err != nil {
-		w.WriteHeader(errStatus)
-		// шаблон страницы с ошибкой
-		errPage := &errorPage{
-			Number: errStatus,
-			Text:   http.StatusText(errStatus),
-		}
-		t := template.Must(template.ParseFiles(errorHtml))
-		templErr := t.Execute(w, errPage)
-		if templErr != nil {
+		if templErr := h.writeError(w, errText, errStatus); templErr != nil {
 			http.Error(w, "The template was not recorded: "+err.Error(), http.StatusInternalServerError)
 			log.Printf("The template was not recorded")
 			return templErr
@@ -146,6 +131,21 @@ func (h *Web) write(w http.ResponseWriter, data []byte, errText string, errStatu
 	if bw != len(data) {
 		log.Printf("%d byte expected, was received %d", len(data), bw)
 		return fmt.Errorf("Partial write to the client")
+	}
+
+	return nil
+}
+
+func (h *Web) writeError(w http.ResponseWriter, errText string, errStatus int) error {
+	w.WriteHeader(errStatus)
+	// шаблон страницы с ошибкой
+	errPage := &errorPage{
+		Number: errStatus,
+		Text:   http.StatusText(errStatus),
+	}
+	// запись шаблона с ошибкой в сокет клиента
+	if err := h.templError.Execute(w, errPage); err != nil {
+		return err
 	}
 
 	return nil
@@ -167,12 +167,16 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 		return nil, err
 	}
 
+	// получить шаблон файла с ошибкой
+	templError := template.Must(template.ParseFiles(errorHtml))
+
 	// определение экземпляра структуры с данными для программы сервера
 	serv := &Web{
-		form:   f,
-		imgDir: imgDir,
-		db:     db,
-		templLink: templLink,
+		form:       f,
+		imgDir:     imgDir,
+		db:         db,
+		templLink:  templLink,
+		templError: templError,
 	}
 
 	// обработчики путей
@@ -294,36 +298,46 @@ const endUpA = 90
 const startLoA = 97
 const endLoA = 122
 
-// генерирую ключ
+// создаю ключ
 func createKey(str string, db *db.DB) (string, error) {
-	res := ""
+	var key *string
 
-START:
-	for lim := keyLen; lim > 0; lim-- {
-		// сгенерировать случайное число
-	LOOP:
-		c := rand.Intn(endLoA + 1)
+	for {
+		// сгенерировать ключ
+		key = generateKey()
 
-		// случайное числовое значение должно соответствовать букве английского алфавита или цифре
-		if c < startInt || c > endInt && c < startUpA || c > endUpA && c < startLoA || c > endLoA {
-			goto LOOP
+		// проверить наличие ключа в бд
+		isFound, err := db.IsExist(*key)
+
+		if err != nil {
+			return "", err
 		}
-		res += string(byte(c))
-	}
 
-	// в бд не должно быть одинаковых ключей
-	isFound, err := db.IsExist(res)
-
-	if err != nil {
-		return "", err
-	}
-
-	// если сгенерированный ключ совпадает с ключом какого-либо документа в бд, сгенерировать новый ключ
-	if isFound == true {
-		res = ""
-		goto START
+		// сгенерированный ключ не должен совпадать с ключом какого-либо документа в бд
+		if isFound == false {
+			break
+		}
 	}
 
 	// вернуть готовый ключ, по которому будет храниться имя файла
-	return res, nil
+	return *key, nil
+}
+
+// генерирю ключ
+func generateKey() *string {
+	res := ""
+
+	for lim := keyLen; lim > 0; lim-- {
+		var c int
+
+		// случайное числовое значение должно соответствовать букве английского алфавита или цифре
+		for c < startInt || c > endInt && c < startUpA || c > endUpA && c < startLoA || c > endLoA {
+			// сгенерировать случайное число
+			c = rand.Intn(endLoA + 1)
+		}
+
+		res += string(byte(c))
+	}
+
+	return &res
 }
