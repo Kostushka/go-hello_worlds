@@ -114,9 +114,14 @@ func NewDB(URIDb, nameDb, nameCollection string) (*DB, error) {
 
 // создание подключения и инициализация коллекции бд
 func connectToDB(URIDb, nameDb, nameCollection string) (*mongo.Collection, error) {
-
+	credential := options.Credential{
+		AuthSource: "share-image",
+		Username: "user",
+		Password: "user123",
+	}
+	
 	// установить параметры клиента
-	clientOptions := options.Client().ApplyURI(URIDb)
+	clientOptions := options.Client().ApplyURI(URIDb).SetAuth(credential)
 
 	// подключиться к MongoDB
 	client, err := mongo.Connect(context.TODO(), clientOptions)
