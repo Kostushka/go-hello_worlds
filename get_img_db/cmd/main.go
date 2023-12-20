@@ -11,8 +11,7 @@ import (
 
 const serviceName = "share-image"
 
-func main() {
-
+func main() {	
 	// получить конфигурационные данные
 	conf, err := configParse()
 	if err != nil {
@@ -23,7 +22,7 @@ func main() {
 		"a file with a form %q; URI for database %q; database name %q; collection name %q",
 		conf.port, conf.imgDir, conf.formFile, conf.URIDb, conf.nameDb, conf.nameCollection)
 
-	// определили пустую бд с коллекцией
+	// определили бд с коллекцией
 	db, err := db.NewDB(conf.URIDb, conf.nameDb, conf.nameCollection)
 	if err != nil {
 		log.Fatal(err)
@@ -37,7 +36,9 @@ func main() {
 	}
 
 	// запуск слушателя и обработчика клиентских запросов
-	log.Fatal(webServer.Run(conf.port))
+	if err := webServer.Run(conf.port); err != nil {
+		log.Fatal(err)
+	}
 }
 
 type config struct {

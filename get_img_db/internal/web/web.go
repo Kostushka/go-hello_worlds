@@ -9,6 +9,10 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"time"
+	"os/signal"
+	"syscall"
+	"context"
 	"path"
 	"text/template"
 )
@@ -189,9 +193,33 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 
 // метод, который запускает слушатель клиентских запросов на соединение
 func (h *Web) Run(port string) error {
-	if err := http.ListenAndServe(port, nil); err != nil {
-		return err
+	server := &http.Server{Addr: port}
+
+	// подпрограмма с слушателем запросов
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("HTTP server ListenAndServe: %v", err)
+		}
+	}()
+
+	// захват сигналов
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	// ожидание сигнала
+	<-sigs
+	log.Printf("The interrupt signal was intercepted")
+
+	// контекст с таймером
+	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	defer cancel()
+
+	// корректное завершение работы в течение 10 секунд или закрытие
+	if err := server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("Server forced to shutdown: %v", err)
 	}
+	log.Printf("Server exiting gracefully")
+	
 	return nil
 }
 
