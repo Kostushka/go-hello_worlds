@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"github.com/Kostushka/share-images/internal/db"
 	"io"
@@ -9,12 +10,11 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
-	"time"
 	"os/signal"
-	"syscall"
-	"context"
 	"path"
+	"syscall"
 	"text/template"
+	"time"
 )
 
 const maxUploadSize = 32 << 20 // 32 MB
@@ -211,7 +211,7 @@ func (h *Web) Run(port string) error {
 	log.Printf("The interrupt signal was intercepted")
 
 	// контекст с таймером
-	ctx, cancel := context.WithTimeout(context.Background(), 10 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// корректное завершение работы в течение 10 секунд или закрытие
@@ -219,7 +219,7 @@ func (h *Web) Run(port string) error {
 		return fmt.Errorf("Server forced to shutdown: %v", err)
 	}
 	log.Printf("Server exiting gracefully")
-	
+
 	return nil
 }
 

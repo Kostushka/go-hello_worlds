@@ -11,6 +11,13 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+// структура с данными аутентификации
+type Auth struct {
+	AuthSource string
+	Username   string
+	Password   string
+}
+
 // структура данных объекта коллекции
 type imageData struct {
 	Filename string
@@ -102,8 +109,8 @@ func (p *DB) Get(key string) ([]byte, error) {
 }
 
 // функция-конструктор
-func NewDB(URIDb, nameDb, nameCollection string) (*DB, error) {
-	collection, err := connectToDB(URIDb, nameDb, nameCollection)
+func NewDB(URIDb, nameDb, nameCollection string, authData *Auth) (*DB, error) {
+	collection, err := connectToDB(URIDb, nameDb, nameCollection, authData)
 	if err != nil {
 		return nil, err
 	}
@@ -113,13 +120,13 @@ func NewDB(URIDb, nameDb, nameCollection string) (*DB, error) {
 }
 
 // создание подключения и инициализация коллекции бд
-func connectToDB(URIDb, nameDb, nameCollection string) (*mongo.Collection, error) {
+func connectToDB(URIDb, nameDb, nameCollection string, authData *Auth) (*mongo.Collection, error) {
 	credential := options.Credential{
-		AuthSource: "share-image",
-		Username: "user",
-		Password: "user123",
+		AuthSource: authData.AuthSource,
+		Username:   authData.Username,
+		Password:   authData.Password,
 	}
-	
+
 	// установить параметры клиента
 	clientOptions := options.Client().ApplyURI(URIDb).SetAuth(credential)
 
