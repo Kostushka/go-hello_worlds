@@ -60,7 +60,7 @@ func configParse() (*config, error) {
 
 	// флаг порта, на котором будет слушать запущенный сервер
 	var port int
-	flag.IntVar(&port, "port", 5000, "port for listen")
+	flag.IntVar(&port, "port", 80, "port for listen")
 
 	// флаг каталога для изображений
 	flag.StringVar(&conf.imgDir, "images-dir", "./images", "catalog for images")
