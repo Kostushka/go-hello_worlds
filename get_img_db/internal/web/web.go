@@ -193,7 +193,7 @@ func NewWeb(formName, imgDir string, db *db.DB) (*Web, error) {
 
 // метод, который запускает слушатель клиентских запросов на соединение
 func (h *Web) Run(port string) error {
-	server := &http.Server{Addr: port}
+	server := &http.Server{Addr: "localhost:"+port}
 
 	// подпрограмма с слушателем запросов
 	go func() {
@@ -299,8 +299,12 @@ func (h *Web) Upload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("The file is written to the database")
 
 	// сформировать ссылку для пользователя
-	scheme := "http://"
-	addr := r.Host
+	schemeDefault := "http://"
+	scheme := schemeDefault
+	if r.Header.Get("X-Forwarded-Proto") != "" {
+		scheme = r.Header.Get("X-Forwarded-Proto") + "://"
+	}
+	addr := r.Header.Get("X-Forwarded-Host")
 	dir := "/images"
 	fileName := key
 	userLink := scheme + addr + path.Join(dir, fileName)

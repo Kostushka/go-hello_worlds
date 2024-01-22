@@ -95,7 +95,7 @@ func configParse() (*config, error) {
 	if port < 0 || port > 65535 {
 		return nil, fmt.Errorf("invalid port value: %v", port)
 	}
-	conf.port = ":" + strconv.Itoa(port)
+	conf.port = strconv.Itoa(port)
 
 	// файл с формой должен быть указан в аргументах командной строки при запуске сервера
 	if conf.formFile == "" {
